@@ -139,29 +139,87 @@ window.exportDashPDF=function(){
   function build(){
     if(built)return;
     const board=document.getElementById('kanban-board');if(!board)return;
-    if(document.getElementById('kb-local-filters'))return;
+    if(document.getElementById('kb-filter-wrap'))return;
     built=true;
-    const bar=document.createElement('div');bar.id='kb-local-filters';
-    bar.style.cssText='display:flex;gap:8px;align-items:center;padding:7px 20px 6px;background:var(--bg-1);border-bottom:1px solid var(--bd);flex-wrap:wrap;flex-shrink:0';
-    bar.innerHTML=`<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--tx-3)">Filtrar:</span>
-      <select id="kbf-area" class="field-input" style="font-size:12px;padding:4px 8px" onchange="applyKanbanFilters()"><option value="">Área</option>${['TI','Marketing','Comercial','Operações','RH','Financeiro','Produto','Design'].map(a=>`<option>${a}</option>`).join('')}</select>
-      <select id="kbf-assign" class="field-input" style="font-size:12px;padding:4px 8px" onchange="applyKanbanFilters()"><option value="">Responsável</option></select>
-      <select id="kbf-pri" class="field-input" style="font-size:12px;padding:4px 8px" onchange="applyKanbanFilters()"><option value="">Criticidade</option><option value="critical">🔴 Crítica</option><option value="high">↑ Alta</option><option value="medium">⬝ Média</option><option value="low">↓ Baixa</option></select>
-      <button class="pill clickable" onclick="clearKanbanFilters()" style="font-size:11px;padding:3px 10px">✕ Limpar</button>
-      <button class="pill clickable" onclick="openRecurringManager()" style="font-size:11px;padding:3px 10px">🔄 Recorrentes</button>
-      <button class="pill clickable" onclick="openMemberManager()" style="font-size:11px;padding:3px 10px">👤 Equipe</button>`;
-    board.parentElement.insertBefore(bar,board);
+
+    // Injetar CSS do dropdown de filtro
+    if(!document.getElementById('kb-filter-css')){
+      const s=document.createElement('style');s.id='kb-filter-css';
+      s.textContent=`
+        #kb-filter-wrap{display:flex;align-items:center;gap:8px;padding:6px 20px;background:var(--bg-1);border-bottom:1px solid var(--bd);flex-shrink:0;position:relative;z-index:50}
+        #kb-filter-dropdown{display:none;position:absolute;top:100%;left:20px;background:var(--bg-1);border:1.5px solid var(--bd);border-radius:var(--r-l);padding:12px 14px;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:200;min-width:460px;flex-wrap:wrap;gap:8px;align-items:flex-end}
+        #kb-filter-dropdown.open{display:flex}
+        .kb-filter-btn{display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:var(--r-f);font-size:12px;font-weight:600;background:var(--bg-2);border:1.5px solid var(--bd);color:var(--tx-2);cursor:pointer;transition:all .15s}
+        .kb-filter-btn:hover{background:var(--bg-3);border-color:var(--bd-2);color:var(--tx-1)}
+        .kb-filter-btn.active{background:var(--ac-bg);border-color:var(--ac);color:var(--ac)}
+      `;
+      document.head.appendChild(s);
+    }
+
+    const wrap=document.createElement('div');wrap.id='kb-filter-wrap';
+    wrap.innerHTML=`
+      <button class="kb-filter-btn" id="kb-filter-toggle" onclick="toggleKanbanFilters()" title="Filtros">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M1 3h11M3 6.5h7M5 10h3"/></svg>
+        Filtros
+        <span id="kb-filter-count" style="display:none;background:var(--ac);color:#fff;border-radius:20px;font-size:10px;padding:1px 6px;margin-left:2px">0</span>
+      </button>
+      <button class="kb-filter-btn" onclick="openRecurringManager()">🔄 Recorrentes</button>
+      <button class="kb-filter-btn" onclick="openMemberManager()">👤 Equipe</button>
+      <div id="kb-filter-dropdown">
+        <div style="width:100%;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--tx-3);margin-bottom:4px">Filtrar tarefas</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">
+          <div><label style="display:block;font-size:10px;font-weight:700;color:var(--tx-3);margin-bottom:3px">Área</label>
+            <select id="kbf-area" class="field-input" style="font-size:12px;padding:4px 8px" onchange="applyKanbanFilters()"><option value="">Todas</option>${['TI','Marketing','Comercial','Operações','RH','Financeiro','Produto','Design'].map(a=>`<option>${a}</option>`).join('')}</select></div>
+          <div><label style="display:block;font-size:10px;font-weight:700;color:var(--tx-3);margin-bottom:3px">Responsável</label>
+            <select id="kbf-assign" class="field-input" style="font-size:12px;padding:4px 8px" onchange="applyKanbanFilters()"><option value="">Todos</option></select></div>
+          <div><label style="display:block;font-size:10px;font-weight:700;color:var(--tx-3);margin-bottom:3px">Criticidade</label>
+            <select id="kbf-pri" class="field-input" style="font-size:12px;padding:4px 8px" onchange="applyKanbanFilters()"><option value="">Todas</option><option value="critical">🔴 Crítica</option><option value="high">↑ Alta</option><option value="medium">⬝ Média</option><option value="low">↓ Baixa</option></select></div>
+          <button class="kb-filter-btn" onclick="clearKanbanFilters()" style="padding:5px 10px">✕ Limpar</button>
+        </div>
+      </div>`;
+    // Insere após a .kanban-toolbar (não antes do board, para não sobrepor col-headers)
+    const toolbar=document.getElementById('view-kanban')?.querySelector('.kanban-toolbar');
+    if(toolbar&&toolbar.nextSibling){toolbar.parentNode.insertBefore(wrap,toolbar.nextSibling);}
+    else{board.parentElement.insertBefore(wrap,board);}
     _popA();
+
+    // Fecha dropdown ao clicar fora
+    document.addEventListener('click',e=>{
+      const wrap=document.getElementById('kb-filter-wrap');
+      if(wrap&&!wrap.contains(e.target)){document.getElementById('kb-filter-dropdown')?.classList.remove('open');document.getElementById('kb-filter-toggle')?.classList.remove('active');}
+    });
   }
   function _popA(){const sel=document.getElementById('kbf-assign');if(!sel)return;const cur=[...sel.options].map(o=>o.value).filter(Boolean);(window.mockTeam||[]).forEach(m=>{if(!cur.includes(m.id)){const o=new Option(m.name,m.id);sel.add(o);}});}
+  window.toggleKanbanFilters=function(){
+    const dd=document.getElementById('kb-filter-dropdown');
+    const btn=document.getElementById('kb-filter-toggle');
+    if(dd){dd.classList.toggle('open');btn?.classList.toggle('active');}
+  };
+
   window.applyKanbanFilters=function(){
     const area=document.getElementById('kbf-area')?.value||'',asgn=document.getElementById('kbf-assign')?.value||'',pri=document.getElementById('kbf-pri')?.value||'';
     const all=PFBoard.cards.length?PFBoard.cards:(window.mockCards||[]);
     document.querySelectorAll('.kcard').forEach(card=>{const c=all.find(x=>x.id===card.dataset.cardId);let show=true;
       if(c){if(area&&(c.area||'')!==area)show=false;if(asgn&&(c.assignee||c.assigned_to||'')!==asgn)show=false;if(pri&&(c.priority||'medium')!==pri)show=false;}
       card.style.display=show?'':'none';});
+    _updateFilterCount();
   };
-  window.clearKanbanFilters=function(){['kbf-area','kbf-assign','kbf-pri'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});document.querySelectorAll('.kcard').forEach(c=>c.style.display='');};
+  window.clearKanbanFilters=function(){
+    ['kbf-area','kbf-assign','kbf-pri'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+    document.querySelectorAll('.kcard').forEach(c=>c.style.display='');
+    _updateFilterCount();
+  };
+
+  function _updateFilterCount(){
+    const area=document.getElementById('kbf-area')?.value||'';
+    const asgn=document.getElementById('kbf-assign')?.value||'';
+    const pri=document.getElementById('kbf-pri')?.value||'';
+    const count=[area,asgn,pri].filter(Boolean).length;
+    const cnt=document.getElementById('kb-filter-count');
+    const btn=document.getElementById('kb-filter-toggle');
+    if(cnt){cnt.style.display=count?'':'none';cnt.textContent=count;}
+    if(btn){btn.classList.toggle('active',count>0);}
+  }
   const _sw=window.switchView;
   window.switchView=function(name,btn){_sw&&_sw(name,btn);if(name==='kanban')setTimeout(build,400);if(name==='dashboard')setTimeout(renderDashboard,100);};
   document.addEventListener('DOMContentLoaded',()=>setTimeout(build,1800));
@@ -191,45 +249,53 @@ window.exportDashPDF=function(){
     if(footer)body.insertBefore(div,footer);else body.appendChild(div);
   }
 
-  // FIX CHECKLIST: limpa TODOS os containers extras antes de recriar
+  // Insere campos extras DENTRO do slot #ce-details-v9-slot (dentro de #ce-panel-details)
+  // Desta forma NUNCA aparecem em outras abas (Fluxo BPMN, Documentação, Anexos, Histórico)
   function refreshEditFields(cardId){
-    document.querySelectorAll('[id^="v9-edit-extras-"]').forEach(e=>e.remove());
-    document.querySelectorAll('[id^="pf-chk-"]').forEach(e=>e.remove());
+    // Limpa slot antes de recriar (evita duplicação)
+    const slot=document.getElementById('ce-details-v9-slot');
+    if(slot) slot.innerHTML='';
     document.getElementById('v9-zip-btn')?.remove();
-    const panel=document.getElementById('ce-panel-details');if(!panel)return;
+
+    if(!slot){console.warn('V9: #ce-details-v9-slot não encontrado');return;}
     const all=PFBoard.cards.length?PFBoard.cards:(window.mockCards||[]);
     const c=all.find(x=>x.id===cardId);if(!c)return;
-    const sv=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v||'';};
-    sv('ce-req-date',c.request_date||'');sv('ce-requester',c.requester||'');
-    sv('ce-area',c.area||'');sv('ce-client-name',c.client_name||'');sv('ce-key-people',c.key_people||'');
-    const footer=panel.closest('.modal-body')?.querySelector('.modal-footer');
-    const div=document.createElement('div');div.id='v9-edit-extras-'+cardId;
-    let solHtml='';
-    if(!document.getElementById('ce-req-date')){
-      const _s=s=>String(s||'').replace(/"/g,'&quot;');
-      solHtml=`<div style="margin:0 0 10px;padding:10px 12px;background:var(--bg-2);border-radius:var(--r-m);border:1px solid var(--bd)">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--tx-3);letter-spacing:.4px;margin-bottom:8px">📋 Dados da Solicitação</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-          <div><label class="field-label" style="font-size:11px">Data solicitação</label><input class="field-input" id="ce-req-date" type="date" value="${_s(c.request_date)}" style="font-size:12px"></div>
-          <div><label class="field-label" style="font-size:11px">Solicitante</label><input class="field-input" id="ce-requester" value="${_s(c.requester)}" placeholder="Nome" style="font-size:12px"></div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-          <div><label class="field-label" style="font-size:11px">Área</label>
-            <select class="field-input" id="ce-area" style="font-size:12px"><option value="">Selecione...</option>${['TI','Marketing','Comercial','Operações','RH','Financeiro','Produto','Design'].map(a=>`<option${c.area===a?' selected':''}>${a}</option>`).join('')}</select></div>
-          <div><label class="field-label" style="font-size:11px">Cliente</label><input class="field-input" id="ce-client-name" value="${_s(c.client_name)}" placeholder="Cliente" style="font-size:12px"></div>
-        </div>
-        <div><label class="field-label" style="font-size:11px">Pessoas-chave</label><input class="field-input" id="ce-key-people" value="${_s(c.key_people)}" placeholder="Stakeholders..." style="font-size:12px"></div>
-      </div>`;
-    }
-    const chkHtml=`<div id="pf-chk-${cardId}" style="margin:0 0 10px;padding:10px 12px;background:var(--bg-2);border-radius:var(--r-m);border:1px solid var(--bd)"></div>`;
-    div.innerHTML=solHtml+chkHtml;
-    if(footer)footer.parentNode.insertBefore(div,footer);else panel.appendChild(div);
+    const _s=s=>String(s||'').replace(/"/g,'&quot;');
+
+    // Bloco Dados da Solicitação — dentro do slot no painel Detalhes
+    const solDiv=document.createElement('div');
+    solDiv.id='v9-edit-extras-'+cardId;
+    solDiv.innerHTML=`<div style="margin:0 0 10px;padding:10px 12px;background:var(--bg-2);border-radius:var(--r-m);border:1px solid var(--bd)">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--tx-3);letter-spacing:.4px;margin-bottom:8px">📋 Dados da Solicitação</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div><label class="field-label" style="font-size:11px">Data solicitação</label><input class="field-input" id="ce-req-date" type="date" value="${_s(c.request_date)}" style="font-size:12px"></div>
+        <div><label class="field-label" style="font-size:11px">Solicitante</label><input class="field-input" id="ce-requester" value="${_s(c.requester)}" placeholder="Nome" style="font-size:12px"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div><label class="field-label" style="font-size:11px">Área</label>
+          <select class="field-input" id="ce-area" style="font-size:12px"><option value="">Selecione...</option>${['TI','Marketing','Comercial','Operações','RH','Financeiro','Produto','Design'].map(a=>`<option${c.area===a?' selected':''}>${a}</option>`).join('')}</select></div>
+        <div><label class="field-label" style="font-size:11px">Cliente</label><input class="field-input" id="ce-client-name" value="${_s(c.client_name)}" placeholder="Cliente" style="font-size:12px"></div>
+      </div>
+      <div><label class="field-label" style="font-size:11px">Pessoas-chave</label><input class="field-input" id="ce-key-people" value="${_s(c.key_people)}" placeholder="Stakeholders..." style="font-size:12px"></div>
+    </div>`;
+    slot.appendChild(solDiv);
+
+    // Checklist — também dentro do slot (painel Detalhes)
+    const chkDiv=document.createElement('div');
+    chkDiv.id='pf-chk-'+cardId;
+    chkDiv.style.cssText='margin:0 0 10px;padding:10px 12px;background:var(--bg-2);border-radius:var(--r-m);border:1px solid var(--bd)';
+    slot.appendChild(chkDiv);
     PFChecklist.render(cardId);
+
+    // Botão ZIP no footer do modal — apenas para concluídas
     const bpmn=c.bpmn||c.bpmn_status||'esbocar';
-    if(bpmn==='concluido'&&footer){
-      const zipBtn=document.createElement('button');zipBtn.id='v9-zip-btn';zipBtn.className='btn-secondary';
-      zipBtn.style.cssText='font-size:12px;margin-right:8px';zipBtn.innerHTML='📦 Exportar .ZIP';
-      zipBtn.onclick=()=>exportTaskZip(cardId);footer.insertBefore(zipBtn,footer.firstChild);
+    if(bpmn==='concluido'){
+      const footer=document.querySelector('#card-edit-overlay .modal-footer');
+      if(footer&&!document.getElementById('v9-zip-btn')){
+        const zipBtn=document.createElement('button');zipBtn.id='v9-zip-btn';zipBtn.className='btn-secondary';
+        zipBtn.style.cssText='font-size:12px;margin-right:8px';zipBtn.innerHTML='📦 Exportar .ZIP';
+        zipBtn.onclick=()=>exportTaskZip(cardId);footer.insertBefore(zipBtn,footer.firstChild);
+      }
     }
   }
 
